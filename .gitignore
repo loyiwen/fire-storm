@@ -1,1 +1,7 @@
 /tests
+
+# Added by cargo
+/target
+
+# Reconstructed output
+*.pdf
