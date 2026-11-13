@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io::Read;
 use std::net::TcpListener;
 
@@ -18,8 +19,8 @@ fn main() -> std::io::Result<()> {
     let (mut incoming, peer) = listener.accept()?;
     println!("sender connected from {peer}");
 
-    // Buffer of bytes to be processed
     let mut buffer: Vec<u8> = Vec::new();
+    let mut packets: BTreeMap<u16, Vec<u8>> = BTreeMap::new();
 
     // Pull bytes off socket until sender closes
     let mut chunk = [0u8; 4096];
@@ -50,6 +51,7 @@ fn main() -> std::io::Result<()> {
 
                 // Packet complete
                 println!("CTFS packet: seq={seq}, length={length}");
+                packets.insert(seq, buffer[16..total].to_vec());
                 buffer.drain(0..total);
             } else {
                 match find_marker(&buffer) {
@@ -66,6 +68,11 @@ fn main() -> std::io::Result<()> {
     }
 
     println!("stream closed; {} bytes left unprocessed", buffer.len());
+    
+    for (seq, payload) in &packets {
+        println!("seq {seq}: {} bytes", payload.len());
+    }
+    println!("{} packets total", packets.len());
 
     Ok(())
 }
