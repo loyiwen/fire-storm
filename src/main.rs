@@ -74,5 +74,13 @@ fn main() -> std::io::Result<()> {
     }
     println!("{} packets total", packets.len());
 
+    let mut document: Vec<u8> = Vec::new();
+    for payload in packets.values() {
+        document.extend_from_slice(payload);
+    }
+
+    std::fs::write("output.pdf", &document)?;
+    println!("wrote output.pdf ({} bytes)", document.len());
+
     Ok(())
 }
