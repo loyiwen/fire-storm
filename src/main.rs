@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
-use std::io::Read;
-use std::net::TcpListener;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
 
 
 // Return byte offset of the head of next "CTFS" marker in `buf` (or None if there isn't one)
@@ -9,15 +9,25 @@ fn find_marker(buf: &[u8]) -> Option<usize> {
 }
 
 
+// Send bytes to the forward port; open connection on first use
+fn forward_bytes(conn: &mut Option<TcpStream>, data: &[u8]) -> std::io::Result<()> {
+    if conn.is_none() {
+        *conn = Some(TcpStream::connect("127.0.0.1:5744")?);
+    }
+    conn.as_mut().unwrap().write_all(data)
+}
+
+
 fn main() -> std::io::Result<()> {
     // Listen for incoming traffic on TCP port 5733
     let listener = TcpListener::bind("127.0.0.1:5733")?;
     println!("listening on 127.0.0.1:5733 ...");
 
-    // Accept one connection
-    // N/B: The test sends everything down a single connection so handling exactly one is enough
     let (mut incoming, peer) = listener.accept()?;
     println!("sender connected from {peer}");
+
+    // Create empty connection slot
+    let mut forward: Option<TcpStream> = None;
 
     let mut buffer: Vec<u8> = Vec::new();
     let mut packets: BTreeMap<u16, Vec<u8>> = BTreeMap::new();
@@ -56,15 +66,23 @@ fn main() -> std::io::Result<()> {
             } else {
                 match find_marker(&buffer) {
                     Some(pos) => {
+                        forward_bytes(&mut forward, &buffer[0..pos])?;
                         buffer.drain(0..pos);
                     }
                     None => {
-                        buffer.drain(0..buffer.len() - 3);
+                        let upto = buffer.len() - 3;
+                        forward_bytes(&mut forward, &buffer[0..upto])?;
+                        buffer.drain(0..upto);
                         break;
                     }
                 }
             }
         }
+    }
+
+    // Flush any remaining bytes
+    if !buffer.is_empty() {
+        forward_bytes(&mut forward, &buffer)?;
     }
 
     println!("stream closed; {} bytes left unprocessed", buffer.len());
