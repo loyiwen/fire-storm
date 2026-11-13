@@ -19,29 +19,24 @@ fn forward_bytes(conn: &mut Option<TcpStream>, data: &[u8]) -> std::io::Result<(
 
 
 fn main() -> std::io::Result<()> {
-    // Listen for incoming traffic on TCP port 5733
     let listener = TcpListener::bind("127.0.0.1:5733")?;
     println!("listening on 127.0.0.1:5733 ...");
-
     let (mut incoming, peer) = listener.accept()?;
     println!("sender connected from {peer}");
-
-    // Create empty connection slot
+    
     let mut forward: Option<TcpStream> = None;
-
     let mut buffer: Vec<u8> = Vec::new();
     let mut packets: BTreeMap<u16, Vec<u8>> = BTreeMap::new();
 
-    // Pull bytes off socket until sender closes
+    // Read stream until sender closes
     let mut chunk = [0u8; 4096];
     loop {
         let n = incoming.read(&mut chunk)?;
         if n == 0 {
             break; // Sender closed connection
         }
-        buffer.extend_from_slice(&chunk[..n]);
-        println!("read {n} bytes (buffer now holds {})", buffer.len());
 
+        buffer.extend_from_slice(&chunk[..n]);
         loop {
             if buffer.len() < 4 {
                 break; // Not enough to check for CTFS marker; wait for more
@@ -60,7 +55,6 @@ fn main() -> std::io::Result<()> {
                 }
 
                 // Packet complete
-                println!("CTFS packet: seq={seq}, length={length}");
                 packets.insert(seq, buffer[16..total].to_vec());
                 buffer.drain(0..total);
             } else {
@@ -80,18 +74,12 @@ fn main() -> std::io::Result<()> {
         }
     }
 
-    // Flush any remaining bytes
+    // Flush any bytes held back for possible split marker
     if !buffer.is_empty() {
         forward_bytes(&mut forward, &buffer)?;
     }
 
-    println!("stream closed; {} bytes left unprocessed", buffer.len());
-    
-    for (seq, payload) in &packets {
-        println!("seq {seq}: {} bytes", payload.len());
-    }
-    println!("{} packets total", packets.len());
-
+    // Reassemble payloads
     let mut document: Vec<u8> = Vec::new();
     for payload in packets.values() {
         document.extend_from_slice(payload);
