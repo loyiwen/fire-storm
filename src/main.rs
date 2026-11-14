@@ -9,7 +9,7 @@ fn find_marker(buf: &[u8]) -> Option<usize> {
 }
 
 
-// Send bytes to the forward port; open connection on first use
+// Send bytes to the forward port
 fn forward_bytes(conn: &mut Option<TcpStream>, data: &[u8]) -> std::io::Result<()> {
     if conn.is_none() {
         *conn = Some(TcpStream::connect("127.0.0.1:5744")?);
@@ -37,41 +37,46 @@ fn main() -> std::io::Result<()> {
         }
 
         buffer.extend_from_slice(&chunk[..n]);
+
+        // Advance a cursor through the buffer; drain consumed bytes once at the end
+        let mut pos = 0;
         loop {
-            if buffer.len() < 4 {
+            let rest = &buffer[pos..];
+            if rest.len() < 4 {
                 break; // Not enough to check for CTFS marker; wait for more
             }
 
-            if buffer.starts_with(b"CTFS") {
-                if buffer.len() < 16 {
+            if rest.starts_with(b"CTFS") {
+                if rest.len() < 16 {
                     break; // Header hasn't fully arrived yet
                 }
                 
-                let seq = u16::from_be_bytes([buffer[4], buffer[5]]);
-                let length = u16::from_be_bytes([buffer[6], buffer[7]]) as usize;
+                let seq = u16::from_be_bytes([rest[4], rest[5]]);
+                let length = u16::from_be_bytes([rest[6], rest[7]]) as usize;
                 let total = 16 + length;
-                if buffer.len() < total {
+                if rest.len() < total {
                     break; // Whole packet hasn't arrived yet
                 }
 
                 // Packet complete
-                packets.insert(seq, buffer[16..total].to_vec());
-                buffer.drain(0..total);
+                packets.insert(seq, rest[16..total].to_vec());
+                pos += total;
             } else {
-                match find_marker(&buffer) {
-                    Some(pos) => {
-                        forward_bytes(&mut forward, &buffer[0..pos])?;
-                        buffer.drain(0..pos);
+                match find_marker(rest) {
+                    Some(marker_pos) => {
+                        forward_bytes(&mut forward, &rest[..marker_pos])?;
+                        pos += marker_pos;
                     }
                     None => {
-                        let upto = buffer.len() - 3;
-                        forward_bytes(&mut forward, &buffer[0..upto])?;
-                        buffer.drain(0..upto);
+                        let upto = rest.len() - 3;
+                        forward_bytes(&mut forward, &rest[..upto])?;
+                        pos += upto;
                         break;
                     }
                 }
             }
         }
+        buffer.drain(0..pos);
     }
 
     // Flush any bytes held back for possible split marker
