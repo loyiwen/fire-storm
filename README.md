@@ -1,6 +1,8 @@
 # Operation FIRE STORM
 
-A Rust program that listens for a TCP stream on port 5733, reconstructs the CTFS-protocol document into `output.pdf`, and forwards all other traffic to port 5744.
+My solution to the **Operation FIRE STORM** challenge by CoreTech Security. The objective is to intercept an incoming network stream, extract the sensitive data being transmitted under the "CTFS" protocol, and forward everything else on untouched.
+
+This Rust program listens on TCP port 5733, reassembles the CTFS payloads into a PDF, and forwards all other traffic to port 5744.
 
 ## Requirements
 - Rust 1.85 or newer
